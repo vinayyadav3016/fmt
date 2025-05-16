@@ -21,7 +21,7 @@
 #endif
 
 // The fmt library version in the form major * 10000 + minor * 100 + patch.
-#define FMT_VERSION 110105
+#define FMT_VERSION 110201
 
 // Detect compiler versions.
 #if defined(__clang__) && !defined(__ibmxl__)
@@ -467,8 +467,7 @@ template <typename T> constexpr const char* narrow(const T*) { return nullptr; }
 constexpr FMT_ALWAYS_INLINE const char* narrow(const char* s) { return s; }
 
 template <typename Char>
-FMT_CONSTEXPR auto compare(const Char* s1, const Char* s2, std::size_t n)
-    -> int {
+FMT_CONSTEXPR auto compare(const Char* s1, const Char* s2, size_t n) -> int {
   if (!is_constant_evaluated() && sizeof(Char) == 1) return memcmp(s1, s2, n);
   for (; n != 0; ++s1, ++s2, --n) {
     if (*s1 < *s2) return -1;
@@ -527,20 +526,20 @@ template <typename Char> class basic_string_view {
 
   constexpr basic_string_view() noexcept : data_(nullptr), size_(0) {}
 
-  /// Constructs a string reference object from a C string and a size.
+  /// Constructs a string view object from a C string and a size.
   constexpr basic_string_view(const Char* s, size_t count) noexcept
       : data_(s), size_(count) {}
 
   constexpr basic_string_view(nullptr_t) = delete;
 
-  /// Constructs a string reference object from a C string.
+  /// Constructs a string view object from a C string.
 #if FMT_GCC_VERSION
   FMT_ALWAYS_INLINE
 #endif
   FMT_CONSTEXPR20 basic_string_view(const Char* s) : data_(s) {
 #if FMT_HAS_BUILTIN(__builtin_strlen) || FMT_GCC_VERSION || FMT_CLANG_VERSION
-    if (std::is_same<Char, char>::value) {
-      size_ = __builtin_strlen(detail::narrow(s));
+    if (std::is_same<Char, char>::value && !detail::is_constant_evaluated()) {
+      size_ = __builtin_strlen(detail::narrow(s));  // strlen is not constexpr.
       return;
     }
 #endif
@@ -549,7 +548,7 @@ template <typename Char> class basic_string_view {
     size_ = len;
   }
 
-  /// Constructs a string reference from a `std::basic_string` or a
+  /// Constructs a string view from a `std::basic_string` or a
   /// `std::basic_string_view` object.
   template <typename S,
             FMT_ENABLE_IF(detail::is_std_string_like<S>::value&& std::is_same<
@@ -586,7 +585,6 @@ template <typename Char> class basic_string_view {
     return starts_with(basic_string_view<Char>(s));
   }
 
-  // Lexicographically compare this string reference to other.
   FMT_CONSTEXPR auto compare(basic_string_view other) const -> int {
     int result =
         detail::compare(data_, other.data_, min_of(size_, other.size_));
@@ -1070,7 +1068,7 @@ template <typename Char> struct named_arg_info {
   int id;
 };
 
-// named_args is non-const to suppress a bogus -Wmaybe-uninitalized in gcc 13.
+// named_args is non-const to suppress a bogus -Wmaybe-uninitialized in gcc 13.
 template <typename Char>
 FMT_CONSTEXPR void check_for_duplicate(named_arg_info<Char>* named_args,
                                        int named_arg_index,
@@ -2264,6 +2262,7 @@ template <typename Context> class value {
   }
 
   // Formats an argument of a custom type, such as a user-defined class.
+  // DEPRECATED! Formatter template parameter will be removed.
   template <typename T, typename Formatter>
   static void format_custom(void* arg, parse_context<char_type>& parse_ctx,
                             Context& ctx) {
